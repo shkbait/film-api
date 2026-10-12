@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+
+.venv/
+
+.pytest_cache/
+
+.DS_Store
+
+films.db
+films.db-shm
+films.db-wal
+
+uploads/*
+!uploads/.gitkeep
+
+.env

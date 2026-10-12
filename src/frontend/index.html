@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Фильмотека</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #0f1117; color: #e6e6e6; min-height: 100vh;
+  }
+  header {
+    background: #161a23; padding: 16px 24px;
+    display: flex; align-items: center; gap: 16px;
+    border-bottom: 1px solid #262c3a; position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 20px; color: #7aa2ff; white-space: nowrap; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
+  input, select, button {
+    background: #1e2430; border: 1px solid #303a4d; color: #e6e6e6;
+    border-radius: 8px; padding: 8px 12px; font-size: 14px; outline: none;
+  }
+  input:focus, select:focus { border-color: #7aa2ff; }
+  input::placeholder { color: #5a6478; }
+  button { cursor: pointer; transition: .15s; }
+  button:hover { border-color: #7aa2ff; }
+  .btn-primary { background: #3b6fe0; border-color: #3b6fe0; color: #fff; font-weight: 600; }
+  .btn-primary:hover { background: #4d7ff0; }
+  .btn-danger { background: #b03434; border-color: #b03434; color: #fff; }
+  .btn-danger:hover { background: #cc4040; }
+  .btn-small { padding: 5px 10px; font-size: 13px; }
+
+  main { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .card {
+    background: #161a23; border: 1px solid #262c3a; border-radius: 12px;
+    padding: 16px; display: flex; gap: 14px; cursor: pointer; transition: .15s;
+  }
+  .card:hover { border-color: #7aa2ff; transform: translateY(-2px); }
+  .poster {
+    width: 90px; height: 130px; border-radius: 8px; object-fit: cover;
+    background: #232a38; flex-shrink: 0;
+  }
+  .card h3 { font-size: 17px; margin-bottom: 6px; color: #fff; }
+  .meta { font-size: 13px; color: #8b95a9; line-height: 1.7; }
+  .badge {
+    display: inline-block; background: #232a38; border-radius: 6px;
+    padding: 2px 8px; font-size: 12px; margin-right: 6px;
+  }
+  .rating { color: #ffd166; font-weight: 700; }
+
+  .pager { display: flex; align-items: center; gap: 12px; justify-content: center; margin: 24px 0; }
+  .pager span { color: #8b95a9; font-size: 14px; }
+  .empty { text-align: center; color: #5a6478; padding: 60px 0; }
+
+  .modal-bg {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7);
+    justify-content: center; align-items: center; z-index: 100; padding: 16px;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: #161a23; border: 1px solid #303a4d; border-radius: 14px;
+    padding: 24px; width: 100%; max-width: 440px; max-height: 90vh; overflow-y: auto;
+  }
+  .modal h2 { font-size: 18px; margin-bottom: 16px; color: #fff; }
+  .modal label { display: block; font-size: 13px; color: #8b95a9; margin: 10px 0 4px; }
+  .modal input, .modal select { width: 100%; }
+  .modal .row { display: flex; gap: 10px; }
+  .modal .row > div { flex: 1; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+  .poster-preview { width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; margin-top: 8px; }
+  .toast {
+    position: fixed; bottom: 20px; right: 20px; background: #232a38;
+    border: 1px solid #303a4d; padding: 12px 18px; border-radius: 10px;
+    display: none; z-index: 200;
+  }
+</style>
+<base target="_blank">
+</head>
+<body>
+
+<header>
+  <h1>🎬 Фильмотека</h1>
+  <div class="filters">
+    <input id="f-title" placeholder="Название...">
+    <input id="f-genre" placeholder="Жанр...">
+    <input id="f-director" placeholder="Режиссёр...">
+    <input id="f-from" type="number" placeholder="Год от">
+    <input id="f-to" type="number" placeholder="Год до" style="width:100px">
+    <select id="f-sort">
+      <option value="">Без сортировки</option>
+      <option value="asc">Год ↑ (старые)</option>
+      <option value="desc">Год ↓ (новые)</option>
+    </select>
+    <button onclick="resetFilters()">Сброс</button>
+  </div>
+  <button class="btn-primary" onclick="openAdd()">+ Добавить</button>
+</header>
+
+<main>
+  <div id="grid" class="grid"></div>
+  <div id="empty" class="empty" style="display:none">Ничего не найдено</div>
+  <div class="pager">
+    <button class="btn-small" onclick="prevPage()">← Назад</button>
+    <span id="page-info"></span>
+    <button class="btn-small" onclick="nextPage()">Вперёд →</button>
+  </div>
+</main>
+
+<!-- Модалка: добавить / редактировать -->
+<div class="modal-bg" id="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h2 id="modal-title">Добавить фильм</h2>
+    <input type="hidden" id="m-id">
+    <label>Название *</label>
+    <input id="m-title">
+    <label>Режиссёр</label>
+    <input id="m-director">
+    <label>Жанр</label>
+    <input id="m-genre">
+    <div class="row">
+      <div>
+        <label>Год</label>
+        <input id="m-year" type="number">
+      </div>
+      <div>
+        <label>Рейтинг (0-10)</label>
+        <input id="m-rating" type="number">
+      </div>
+    </div>
+    <label>Постер</label>
+    <input id="m-poster" type="file" accept="image/*">
+    <img id="m-poster-preview" class="poster-preview" style="display:none">
+    <div class="modal-actions">
+      <button class="btn-danger" id="m-delete" style="display:none" onclick="deleteCurrent()">Удалить</button>
+      <button onclick="closeModal()">Отмена</button>
+      <button class="btn-primary" onclick="saveFilm()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';  // пусто = тот же адрес, откуда открыта страница
+const LIMIT = 6;
+let offset = 0;
+let totalLoaded = 0;
+
+// ---------- загрузка списка ----------
+async function loadFilms() {
+  const p = new URLSearchParams({ limit: LIMIT, offset });
+  const t = document.getElementById('f-title').value.trim();
+  const g = document.getElementById('f-genre').value.trim();
+  const d = document.getElementById('f-director').value.trim();
+  const yf = document.getElementById('f-from').value;
+  const yt = document.getElementById('f-to').value;
+  const sort = document.getElementById('f-sort').value;
+  if (t) p.set('title', t);
+  if (g) p.set('genre', g);
+  if (d) p.set('director', d);
+  if (yf) p.set('year_from', yf);
+  if (yt) p.set('year_to', yt);
+  if (sort === 'asc') p.set('asc_find', 'true');
+  if (sort === 'desc') p.set('desc_find', 'true');
+
+  const res = await fetch(`${API}/films/filters?${p}`);
+  if (!res.ok) { toast('Ошибка загрузки: ' + res.status); return; }
+  const films = await res.json();
+  render(films);
+}
+
+function render(films) {
+  const grid = document.getElementById('grid');
+  const empty = document.getElementById('empty');
+  grid.innerHTML = '';
+  empty.style.display = films.length ? 'none' : 'block';
+  totalLoaded = films.length;
+  document.getElementById('page-info').textContent =
+    `показано ${films.length} | страница ${Math.floor(offset / LIMIT) + 1}`;
+
+  films.forEach(f => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.onclick = () => openEdit(f);
+    const poster = f.poster_path
+      ? `${API}/static/${f.poster_path.replace('uploads/', '')}`
+      : '';
+    card.innerHTML = `
+      ${poster ? `<img class="poster" src="${poster}">` : `<div class="poster"></div>`}
+      <div>
+        <h3>${esc(f.title)}</h3>
+        <div class="meta">
+          ${f.director ? esc(f.director) + '<br>' : ''}
+          <span class="badge">${esc(f.genre || '—')}</span>
+          <span class="badge">${f.year || '—'}</span><br>
+          ${f.rating != null ? `<span class="rating">★ ${f.rating}</span>` : ''}
+        </div>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+// ---------- пагинация ----------
+function prevPage() { if (offset >= LIMIT) { offset -= LIMIT; loadFilms(); } }
+function nextPage() { if (totalLoaded >= LIMIT) { offset += LIMIT; loadFilms(); } }
+
+let searchTimer;
+document.querySelectorAll('.filters input, .filters select').forEach(el => {
+  el.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { offset = 0; loadFilms(); }, 300);
+  });
+});
+function resetFilters() {
+  document.querySelectorAll('.filters input').forEach(el => el.value = '');
+  document.getElementById('f-sort').value = '';
+  offset = 0; loadFilms();
+}
+
+// ---------- добавить ----------
+function openAdd() {
+  document.getElementById('modal-title').textContent = 'Добавить фильм';
+  document.getElementById('m-id').value = '';
+  ['m-title','m-director','m-genre','m-year','m-rating'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('m-poster').value = '';
+  document.getElementById('m-poster-preview').style.display = 'none';
+  document.getElementById('m-delete').style.display = 'none';
+  document.getElementById('modal-bg').classList.add('open');
+}
+
+// ---------- редактировать ----------
+function openEdit(f) {
+  document.getElementById('modal-title').textContent = 'Редактировать фильм';
+  document.getElementById('m-id').value = f.id;
+  document.getElementById('m-title').value = f.title ?? '';
+  document.getElementById('m-director').value = f.director ?? '';
+  document.getElementById('m-genre').value = f.genre ?? '';
+  document.getElementById('m-year').value = f.year ?? '';
+  document.getElementById('m-rating').value = f.rating ?? '';
+  const prev = document.getElementById('m-poster-preview');
+  if (f.poster_path) {
+    prev.src = `${API}/static/${f.poster_path.replace('uploads/', '')}`;
+    prev.style.display = 'block';
+  } else prev.style.display = 'none';
+  document.getElementById('m-delete').style.display = 'inline-block';
+  document.getElementById('modal-bg').classList.add('open');
+}
+
+function closeModal() { document.getElementById('modal-bg').classList.remove('open'); }
+
+// ---------- сохранить (POST или PATCH) ----------
+async function saveFilm() {
+  const id = document.getElementById('m-id').value;
+  const body = {
+    title: document.getElementById('m-title').value,
+    director: document.getElementById('m-director').value || null,
+    genre: document.getElementById('m-genre').value || null,
+    year: document.getElementById('m-year').value ? +document.getElementById('m-year').value : null,
+    rating: document.getElementById('m-rating').value ? +document.getElementById('m-rating').value : null,
+  };
+  if (!body.title) { toast('Название обязательно'); return; }
+
+  const url = id ? `${API}/films/${id}` : `${API}/films`;
+  const res = await fetch(url, {
+    method: id ? 'PATCH' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) { toast('Ошибка сохранения: ' + res.status); return; }
+
+  const saved = await res.json();
+  const filmId = id || saved.film_id;
+
+  // постер, если выбран
+  const file = document.getElementById('m-poster').files[0];
+  if (file && filmId) {
+    const fd = new FormData();
+    fd.append('file', file);
+    const up = await fetch(`${API}/films/${filmId}/upload-poster`, { method: 'POST', body: fd });
+    if (!up.ok) { toast('Фильм сохранён, но постер не загрузился: ' + up.status); }
+  }
+
+  closeModal();
+  toast('Сохранено');
+  loadFilms();
+}
+
+// ---------- удалить ----------
+async function deleteCurrent() {
+  const id = document.getElementById('m-id').value;
+  if (!id || !confirm('Удалить фильм?')) return;
+  const res = await fetch(`${API}/films/${id}`, { method: 'DELETE' });
+  if (!res.ok) { toast('Ошибка удаления: ' + res.status); return; }
+  closeModal();
+  toast('Удалено');
+  loadFilms();
+}
+
+// ---------- уведомление ----------
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.style.display = 'none', 3000);
+}
+
+loadFilms();
+</script>
+</body>
+</html>
