@@ -11,6 +11,10 @@ films.db
 films.db-shm
 films.db-wal
 
+users.db
+users.db-shm
+users.db-wal
+
 uploads/*
 !uploads/.gitkeep
 

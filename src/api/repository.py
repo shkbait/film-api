@@ -1,14 +1,32 @@
 from pathlib import Path
-
-from fastapi import Depends, UploadFile
+import aiofiles
+from authx import AuthX, AuthXConfig
+from fastapi import Depends, HTTPException, Response, UploadFile
+from pwdlib import PasswordHash
 import os
 import shutil
 from sqlalchemy import select,desc
 from src.database import new_session
 from src.model.film import Film_Model
-from src.schemas.films import Film_add_scheme, Film_filters_scheme,Film_scheme, Film_update_scheme
+from src.schemas.films import Film_add_scheme, Film_filters_scheme,Film_scheme, Film_update_scheme, User_Reg_sheme, UserLoginScheme
 import pandas as pd
+from src.model.auth import Login_Model
+from src.user_database import new_session as user_new_session
 UPLOAD_DIR="uploads"
+
+password_hash=PasswordHash.recommended()
+config=AuthXConfig()
+config.JWT_SECRET_KEY="SECRET_KEY"
+config.JWT_ACCESS_COOKIE_NAME="my_access_token"
+config.JWT_TOKEN_LOCATION=["cookies"]
+config.JWT_COOKIE_CSRF_PROTECT = True
+config.JWT_COOKIE_SECURE = False
+
+security=AuthX(config=config)
+
+
+# config.JWT_COOKIE_CSRF_PROTECT = False 
+# config.JWT_COOKIE_SECURE = False
 
 
 class FilmsRepo:
@@ -21,16 +39,65 @@ class FilmsRepo:
             
           
             new_film = Film_Model(**film_dict)
+
             
             # Добавляем в сессию
             session.add(new_film)
-            
            
             await session.flush()
            
             await session.commit()
             
             return new_film.id
+
+#  @classmethod
+#  async def registration(cls, data: User_Reg_sheme):
+#       async with user_new_session() as session:
+#            user_dict=data.model_dump()
+#            user_dict["password"]=password_hash.hash(user_dict["password"])
+#            new_user=Login_Model(**user_dict)
+#            session.add(new_user)
+#            await session.flush()
+#            await session.commit()
+
+#            return new_user.id
+
+#  @classmethod
+#  async def login(cls, data: UserLoginScheme,response: Response):
+#       async with user_new_session() as session:
+#            query=select(Login_Model).where(data.username==Login_Model.username)
+#            result=await session.execute(query)
+#            user = result.scalar_one_or_none()
+#            if user is None:
+#                raise HTTPException(status_code=401,detail="Invalid username or password")
+
+#            if not password_hash.verify(data.password, user.password):
+#                raise HTTPException(status_code=401,detail="Invalid username or password")
+#            token = security.create_access_token(uid=str(user.id))
+#            security.set_access_cookies(token, response)
+#            print(response.headers)
+
+
+#            return {"access_token": token}
+
+#  @classmethod
+#  async def logout(cls,respone: Response):
+#       async with user_new_session() as session:
+           
+      
+           
+
+          #  if data.username==Login_Model.username:
+          #       if password_hash.verify(data.password, Login_Model.password):
+          #            token=security.create_access_token(uid="")
+          #            response.set_cookie(
+                          
+          #            )
+                     
+      
+      # def verify_password(password: str, hashed_password: str) -> bool:
+#     return password_hash.verify(password, hashed_password)
+
 
 #  @classmethod
 #  async def upload_poster(cls,film_id:int, file: UploadFile)->bool:
@@ -61,8 +128,11 @@ class FilmsRepo:
         file_path = os.path.join(UPLOAD_DIR, file_name)
         
         os.makedirs(UPLOAD_DIR, exist_ok=True)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+     #    with open(file_path, "wb") as buffer:
+     #        shutil.copyfileobj(file.file, buffer)
+        async with aiofiles.open(file_path,"wb") as buffer:
+             while content := await file.read(1024*1024):
+                  await buffer.write(content)
 
         film.poster_path = file_path
         await session.commit()
@@ -154,7 +224,7 @@ class FilmsRepo:
            film=await session.get(Film_Model, film_id)
            if film is None:
                 return None
-           for field, value in data.model_dump(exclude_unset=True).items():
+           for field, value in data.model_dump(exclude_none=True).items():
                 setattr(film, field, value) #{film, "rating", 9}==film.rating=9
            await session.commit()
            return Film_scheme.model_validate(film, from_attributes=True)
@@ -170,4 +240,6 @@ class FilmsRepo:
            await session.delete(film)
            await session.commit()
            return True
+
+      
            

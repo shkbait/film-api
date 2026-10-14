@@ -1,14 +1,21 @@
 from typing import Annotated
 import os
 import shutil
-from fastapi import APIRouter, Depends,HTTPException, Query, UploadFile
+from pydantic import BaseModel,Field,EmailStr,ConfigDict
+from fastapi import APIRouter, Depends,HTTPException, Query, Request, Response, UploadFile,Header
 from sqlalchemy import select
 from src.api.repository import FilmsRepo
 from src.api.dependencies import SessionDep
 from src.database import engine, Base
-from src.schemas.films import Film_add_scheme, Film_filters_scheme,Film_scheme, Film_update_scheme
+from src.user_database import engine as user_engine
+from src.user_database import Base as user_base
+from src.schemas.films import Film_add_scheme, Film_filters_scheme,Film_scheme, Film_update_scheme, UserLoginScheme, User_Reg_sheme
 from src.model.film import Film_Model
+from src.model.auth import Login_Model
 from src.api.dependencies import PaginationDep
+from authx import TokenPayload
+from src.api.repository import security,config
+
 
 from src.database import new_session
 
@@ -16,12 +23,19 @@ router=APIRouter()
 
 UPLOAD_DIR="uploads"
 
+
 @router.post("/setup_database")
 async def setup_database():
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     return {"ok": True, "message": "Database setup completed successfully"}
+
+@router.post("/setup_user_database")
+async def setup_user_db():
+    async with user_engine.begin() as conn:
+        await conn.run_sync(user_base.metadata.create_all)
+    return {"ok": True, "message": "Database setup completed successfully"}
+
 
 # @router.post("/films")
 # async def add_film(data: Film_add_scheme,session: SessionDep):
@@ -32,13 +46,33 @@ async def setup_database():
 #     session.add(new_film)
 #     await session.commit()
 
+# @router.get("/profile")
+# async def profile(
+#     payload: TokenPayload = Depends(security.access_token_required)
+# ):
+#     return {"user_id": payload.sub}
+
+# @router.get("/check-cookie")
+# async def check_cookie(request: Request):
+#     return {
+#         "access_cookie": request.cookies.get("my_access_token"),
+#         "csrf_cookie": request.cookies.get("csrf_access_token")
+#     }
 
 @router.post("/films")
 async def add_film(
-    data: Annotated[Film_add_scheme,Depends()]
+    data: Annotated[Film_add_scheme,Depends()],
     ) -> dict:
+
+    # if data.year is not None:
+    #     if data.year<1:
+    #         raise HTTPException(status_code=422, detail="incorrect year")
+    # if data.rating is not None:
+    #     if data.rating<1 or data.rating>10:
+    #         raise HTTPException(status_code=422, detail="incorrect rating")
     film_id = await FilmsRepo.add_one(data)
     return {"ok": True, "film_id": film_id}
+
 
 # @router.post("/films/{film_id}/upload-poster")
 # async def upload_poster(film_id: int, file: UploadFile):
@@ -59,7 +93,7 @@ async def add_film(
 #     return {"message": "Successfully", "path": file_path}
 
 @router.post("/films/{film_id}/upload-poster")
-async def upload_poster(film_id: int, file: UploadFile):
+async def upload_poster(film_id: int, file: UploadFile,):
     if not file.filename:
         raise HTTPException(status_code=400, detail="file withot name")
     result= await FilmsRepo.upload_poster(film_id,file)
@@ -73,6 +107,7 @@ async def upload_poster(film_id: int, file: UploadFile):
 @router.get("/films/filters")
 async def get_current_films(
     pagination: PaginationDep,
+    # payload: TokenPayload = Depends(security.access_token_required),
     title: str | None = None,   
     genre: str | None = None,
     director: str | None = None,
@@ -106,6 +141,7 @@ async def delete_f(film_id: int)->dict:
     if not deleted:
         raise HTTPException(status_code=404, detail="Film not found")
     return {"ok": True}
+
 
 # @router.post("/Uploadfiles")
 # def create_upload_files(uploadedfiles: list[UploadFile]):
