@@ -42,23 +42,3 @@ async def logout_user(
 
 from fastapi import Request, HTTPException, status
 
-
-# async def access_token_required(request: Request):
-#     # 1. Сначала ищем в Cookies
-#     token = request.cookies.get(config.JWT_ACCESS_COOKIE_NAME)
-    
-#     # 2. Если куки нет (как сейчас в Swagger), ищем в заголовках
-#     if not token:
-#         auth_header = request.headers.get("Authorization")
-#         if auth_header and auth_header.startswith("Bearer "):
-#             token = auth_header.split(" ")[1]
-            
-#     # 3. Если токена нет вообще нигде — тогда уже кидаем 401
-#     if not token:
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail="Token is missing"
-#         )
-        
-#     # Ваша обычная логика декодирования токена:
-#     return security.decode_token(token)
